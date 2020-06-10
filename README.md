@@ -1,2 +1,2 @@
 # Python Projects
-This is my repository for all Python projects pertaining - OOP and Machine Learning projects
+This is a repository of Python projects pertaining to OOP and Machine Learning projects
