@@ -1,0 +1,133 @@
+---
+title: "final-project-actuarially"
+output: html_document
+---
+Loading Packages
+```{r}
+library(readxl)
+library(lubridate)
+library(dplyr)
+library(ggplot2)
+library(gridExtra)
+library(dummies)
+```
+
+```{r}
+claims <- read.csv("/Users/AKaffa/Desktop/stat133/General_Analytics_Claims.csv")
+policies <- read.csv("/Users/AKaffa/Desktop/stat133/General_Analytics_Policies.csv")
+data <- read_xlsx("/Users/AKaffa/Desktop/stat133/General_Analytics_Data.xlsx")
+```
+
+Plotting Claim Severity Against Time 
+```{r}
+# Adding a claim severity column to the data frame
+
+# Creating a vector of claim counts per year starting from 2011 to 2017
+
+yearly.claim.counts <- rep(0,7)
+dates <- mdy(claims$claim_date)
+years <- year(dates)
+for (i in 1:length(years)) {
+  d <- (years[i]%%1000) - 10
+  yearly.claim.counts[d] <- yearly.claim.counts[d] + 1
+}
+
+# Calculating the severities per year group 
+
+claimdraft <- claims
+claimdraft$claim_date <- year(mdy(claimdraft$claim_date))
+
+new_claims_table <- data.frame()
+for (year in seq(2011,2017,1)) {
+  group <- filter(claimdraft, claim_date==year)
+  count <- yearly.claim.counts[(year%%1000) - 10]
+  group <- mutate(group, individual_severity=claim_amount/count, claim_severity = sum(claim_amount)/count)
+  new_claims_table <- rbind(new_claims_table, group)
+}
+```
+
+
+```{r}
+# Generating the Plot
+
+claims_severity_plot <- ggplot(new_claims_table, aes(claim_date,claim_severity)) + theme_classic() + geom_line() + xlab("Date") + ylab("Claim Severity") + geom_point(aes(x= 2017, y = max(claim_severity), colour= "purple"), show.legend = FALSE) + ggtitle("Claim Severities over 7 Years (2012-2017)")
+
+ggsave(filename="claims_severity_plot.png", width=6.5,height=5) #exporting plot to add to the report
+```
+
+Graph of Claims in 2017
+```{r}
+
+q <- filter(new_claims_table, claim_date==2017)
+
+#Graph of Claims in 2017
+claimsdraft <- claims
+claimsdraft$claim_date <- mdy(claimsdraft$claim_date)
+
+
+oct2017.data <- select(claimsdraft, policy_number, claim_date, claim_amount)
+oct2017.data <- filter(oct2017.data, year(claim_date)==2017)
+oct2017.data <- filter(oct2017.data, month(claim_date)==10)
+oct2017.data <- summarise(group_by(oct2017.data, day(claim_date)), aggregate.amount = sum(claim_amount)) # Aggregating daily claim amounts
+colnames(oct2017.data) <- c("Day", "Claim_Amount")
+
+oct2017_graph <- ggplot(oct2017.data) + geom_line(aes(x=Day,y=Claim_Amount)) + labs(x="Date", y="Claim Amount", title ="Claim Amounts Through October Northern California Wildfires") + theme_classic() + 
+  geom_point(aes(x=10, y = Claim_Amount[10], colour= "purple"), show.legend = FALSE) +
+ geom_point(aes(x=31, y = Claim_Amount[31], colour= "purple"), show.legend = FALSE) 
+
+ggsave(filename="oct2017_graph.png", width=6.5,height=5) #exporting plot to add to the report
+```
+
+
+```{r}
+#Getting the number of claims per location in October 2017 
+
+nonaggregated_data <- select(claimsdraft, policy_number, claim_date, claim_amount)
+nonaggregated_data <- filter(nonaggregated_data, year(claim_date)==2017)
+nonaggregated_data <- filter(nonaggregated_data, month(claim_date)==10)
+
+location <- c()
+for (i in nonaggregated_data$policy_number) {  
+  county.i <- policies$county[which(policies$policy_number==i)]
+  location <- c(location, as.character(county.i))
+}  
+nonaggregated_data <- mutate(nonaggregated_data, location = location)
+location_table <- as.data.frame(table(location))
+
+#exporting the table to add to the report
+png(filename = "location_table.png", width=250, height=250, bg="white")
+grid.table(location_table)
+dev.off()
+```
+
+Identifying correlated factors 
+```{r}
+#find which data is categorical
+sapply(policies,class)
+
+#removing catastroph data
+
+catastroph <- filter(nonaggregated_data, (location=="Napa" | location =="Solano" | location =="Sonoma"))
+
+for (pol in catastroph$policy_number) {
+  policiesdraft <- filter(policies, policy_number!= pol)
+}
+
+#transform categorical values into dummies 
+
+policiesdraft <- dummy.data.frame(policiesdraft, names = c("agency","county","construction_type", "roof_type", "construction_year","square_footage","house_value"))
+
+#Construction type and construction year 
+cor(policiesdraft[21:23],policiesdraft[28:30])
+#County and Public protection class
+cor(policiesdraft[12:20],policiesdraft[35])
+#Square Footage and House Value Year and 
+cor(policiesdraft[31:34],policiesdraft[36:40])
+#House Value and public protection class
+cor(policiesdraft[36:40],policiesdraft[35])
+#House Value and County
+cor(policiesdraft[36:40],policiesdraft[12:20])
+
+
+```
+
